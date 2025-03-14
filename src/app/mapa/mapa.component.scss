@@ -1,0 +1,22 @@
+#mapas {
+  flex: 1;
+  height: 500px; /* Ajusta la altura según sea necesario */
+  border: 1px solid #ccc;
+}
+
+#input {
+  width: 500px;
+  padding: 10px;
+  border: 1px solid #ccc;
+}
+
+.poligono-item {
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+}
+
+button {
+  margin-right: 5px;
+}

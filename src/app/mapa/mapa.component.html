@@ -1,0 +1,37 @@
+<!-- Mapa -->
+<div id="mapas"></div>
+
+<!-- Controles -->
+<div id="input">
+
+  <!-- Botón para guardar cambios -->
+  @if (poligonoEditando) {
+    <button class="btn-guardar" (click)="guardarCambios()">Guardar Cambios</button>
+  }
+  <!-- Lista de polígonos -->
+  <div class="poligono-list">
+    @if (poligonos.length === 0) {
+      <p>No hay polígonos guardados.</p>
+    } @else {
+      @for (pol of poligonos; track $index) {
+        <div class="poligono-item">
+          <h3>Polígono {{ pol.id }}</h3>
+          <p><strong>Coordenadas:</strong></p>
+          <ul>
+            @for (coord of pol.coordenadas; track $index) {
+              <li>{{ coord }}</li>
+            }
+          </ul>
+          <button class="btn-editar" (click)="editarPoligono(pol.id)">Editar</button>
+          <button class="btn-eliminar" (click)="eliminarPoligono(pol.id)">Eliminar</button>
+
+        </div>
+      }
+    }
+  </div>
+
+
+
+  <!-- Botón para mostrar polígonos -->
+  <button class="btn-mostrar" (click)="mostrarPoligonosSeleccionados()">Mostrar polígonos</button>
+</div>
