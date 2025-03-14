@@ -272,28 +272,35 @@ export class MapaComponent implements OnInit {
   };
 
   ngOnInit(): void {
-    // Configurar el token de acceso para Mapbox
     (mapboxgl as any).default.accessToken = environment.tokenMapbox;
 
-    // Definir los límites de Bolivia
     const bounds: mapboxgl.LngLatBoundsLike = [
-      [-69.645, -22.898], // Suroeste (Punto más bajo)
-      [-57.453, -9.679], // Noreste (Punto más alto)
+      [-69.645, -22.898], // Suroeste de Bolivia
+      [-57.453, -9.679], // Noreste de Bolivia
     ];
 
-    // Inicializar el mapa con límites
     this.mapa = new mapboxgl.Map({
-      container: 'mapas', // ID del contenedor HTML donde se renderizará el mapa
-      style: 'mapbox://styles/mapbox/streets-v12', // Estilo del mapa
-      center: [-64.6853, -16.2902], // Centro aproximado de Bolivia
-      zoom: 16.6, // Nivel de zoom inicial
-      maxBounds: bounds, // Restringir la vista del mapa a Bolivia
+      container: 'mapas',
+      style: 'mapbox://styles/mapbox/streets-v12',
+      center: [-64.968, -16.29], // Centro aproximado de Bolivia
+      zoom: 5, // Zoom óptimo para mostrar Bolivia entera
+      maxBounds: bounds, // Limita la vista a Bolivia
     });
 
-    // Activar el modo de dibujo al iniciar
-    this.activarModoDibujo();
-  }
+    // Esperar a que el estilo del mapa esté completamente cargado
+    this.mapa.on('load', () => {
+      // Ajustar el mapa automáticamente dentro de los límites
+      this.mapa.fitBounds(bounds, { padding: 20 });
 
+      // Deshabilitar el zoom y el desplazamiento fuera de Bolivia
+      this.mapa.dragRotate.disable();
+      this.mapa.keyboard.disable();
+      this.mapa.touchZoomRotate.disable();
+
+      // Activar el modo de dibujo
+      this.activarModoDibujo();
+    });
+  }
   // Método para activar el modo de dibujo
   activarModoDibujo() {
     // Evento para capturar clics en el mapa y agregar puntos
@@ -343,8 +350,6 @@ export class MapaComponent implements OnInit {
     // Verificar si la distancia está dentro del radio de tolerancia
     return distancia <= this.radioTolerancia;
   }
-
-  // Método para agregar un punto seleccionado en el mapa
 
   // Método para agregar un punto seleccionado en el mapa
   agregarPunto(longitud: number, latitud: number) {
