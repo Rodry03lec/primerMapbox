@@ -10,253 +10,143 @@ import { environment } from '../../environments/environment';
   styleUrl: './mapa.component.scss',
 })
 export class MapaComponent implements OnInit {
-  /* mapa!: mapboxgl.Map; // Variable para almacenar el mapa
-  puntos: number[][] = []; // Almacena temporalmente los puntos del polígono actual
-  poligonos: { id: string; coordenadas: number[][] }[] = []; // Almacena todos los polígonos seleccionados
-  modoDibujo: boolean = false; // Indica si el modo de dibujo está activo
-  marcadores: mapboxgl.Marker[] = []; // Almacena los marcadores de los puntos
-  radioTolerancia: number = 10; // Radio de tolerancia para cerrar el polígono (en píxeles)
+
+   mapa!: mapboxgl.Map; // Variable para almacenar el mapa
 
   ngOnInit(): void {
-    // Configurar el token de acceso para Mapbox
     (mapboxgl as any).default.accessToken = environment.tokenMapbox;
 
-    // Inicializar el mapa
+    const bounds: mapboxgl.LngLatBoundsLike = [
+      [-81.332, -55.03],  // Suroeste de Sudamérica (aproximación)
+      [-34.793, 13.333],  // Noreste de Sudamérica (aproximación)
+    ];
+
     this.mapa = new mapboxgl.Map({
-      container: 'mapas', // ID del contenedor HTML donde se renderizará el mapa
-      style: 'mapbox://styles/mapbox/streets-v12', // Estilo del mapa
-      center: [-68.163914, -16.510437], // Posición inicial del mapa (longitud, latitud)
-      zoom: 16.6, // Nivel de zoom inicial
+      container: 'mapas',
+      style: 'mapbox://styles/mapbox/streets-v10',
+      center: [-64.968, -16.29], // Centro aproximado de Bolivia
+      maxZoom: 16,       // Ajusta el nivel máximo de zoom
+      minZoom: 5,       // Ajusta el nivel mínimo de zoom
+      maxBounds: bounds, // Limita la vista a Bolivia
     });
 
-    // Activar el modo de dibujo al hacer clic en un botón
-    this.activarModoDibujo();
+    //this.addGeoServerLayer(this.mapa);  // Capa WMS (Raster) de GeoServer
+    this.addGeoJSONLayer(this.mapa);   // Capa GeoJSON de GeoServer
   }
 
-  // Método para activar el modo de dibujo
-  activarModoDibujo() {
-    this.modoDibujo = true;
+  // Método para añadir la capa WMS desde GeoServer
+  addGeoServerLayer(map: mapboxgl.Map) {
+    map.on('load', () => {
+      map.addSource('geoserver-wms-layer', {
+        type: 'raster',
+        tiles: [
+          'https://geo.gob.bo/geoserver/geonode/ows?service=WMS&version=1.1.1&request=GetMap&layers=geonode:15_uc_jaguar&bbox=-69.5,-23.0,-69.0,-22.5&width=256&height=256&srs=EPSG:4326&format=image/png&transparent=true'
+        ],
+        tileSize: 256
+      });
 
-    // Evento para capturar clics en el mapa y agregar puntos
-    this.mapa.on('click', (e) => {
-      if (this.modoDibujo) {
-        // Verificar si el usuario está intentando cerrar el polígono
-        if (this.puntos.length >= 3 && this.estaCercaDelPrimerPunto(e.point)) {
-          this.puntos.push(this.puntos[0]); // Cerrar el polígono (último punto igual al primero)
-          this.dibujarPoligono(`polygon-temp`, this.puntos); // Dibujar el polígono temporalmente
-
-          // Mostrar alerta para guardar el polígono
-          const guardar = confirm('¿Desea guardar este polígono?');
-          if (guardar) {
-            this.guardarPoligono(); // Guardar el polígono en la lista
-          } else {
-            this.eliminarPoligonoTemporal(); // Eliminar el polígono temporal
-          }
-          this.puntos = []; // Reiniciar los puntos para permitir la selección de un nuevo polígono
-        } else {
-          this.agregarPunto(e.lngLat.lng, e.lngLat.lat); // Agregar punto seleccionado al array
+      map.addLayer({
+        id: 'geoserver-wms-layer',
+        type: 'raster',
+        source: 'geoserver-wms-layer',
+        paint: {
+          'raster-opacity': 0.7  // Control de opacidad
         }
-      }
-    });
-
-    // Evento para eliminar el último punto al presionar la tecla "Escape"
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this.modoDibujo) {
-        this.eliminarUltimoPunto();
-      }
+      });
     });
   }
 
-  // Método para verificar si el punto está cerca del primer punto
-  estaCercaDelPrimerPunto(puntoClick: mapboxgl.Point): boolean {
-    if (this.puntos.length === 0) return false;
+  // Método para añadir la capa GeoJSON desde GeoServer
+  /* addGeoJSONLayer(map: mapboxgl.Map) {
+    fetch("https://geo.gob.bo/geoserver/geonode/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=geonode%3Aareas_protegidaswgs84&maxFeatures=50&outputFormat=application%2Fjson")
+      .then(response => response.json())
+      .then(data => {
+        map.on('load', () => {
+          // Añadir la fuente GeoJSON al mapa
+          map.addSource('geoserver-geojson-layer', {
+            type: 'geojson',
+            data: data, // Los datos GeoJSON obtenidos de GeoServer
+          });
 
-    // Convertir el primer punto a coordenadas de pantalla
-    const primerPunto = this.mapa.project([
-      this.puntos[0][0],
-      this.puntos[0][1],
-    ]);
-
-    // Calcular la distancia entre el punto clickeado y el primer punto
-    const distancia = Math.sqrt(
-      Math.pow(puntoClick.x - primerPunto.x, 2) +
-        Math.pow(puntoClick.y - primerPunto.y, 2)
-    );
-
-    // Verificar si la distancia está dentro del radio de tolerancia
-    return distancia <= this.radioTolerancia;
-  }
-
-  // Método para agregar un punto seleccionado en el mapa
-  agregarPunto(longitud: number, latitud: number) {
-    this.puntos.push([longitud, latitud]); // Agregar las coordenadas al array
-
-    // Crear y añadir un marcador en la posición seleccionada
-    const marcador = new mapboxgl.Marker()
-      .setLngLat([longitud, latitud])
-      .addTo(this.mapa);
-    this.marcadores.push(marcador); // Guardar el marcador en el array
-
-    // Dibujar la línea temporal si hay más de un punto
-    if (this.puntos.length > 1) {
-      this.dibujarLineaTemporal([...this.puntos]);
-    }
-  }
-
-  // Método para eliminar el último punto
-  eliminarUltimoPunto() {
-    if (this.puntos.length > 0) {
-      this.puntos.pop(); // Eliminar el último punto del array
-
-      // Eliminar el último marcador del mapa
-      const ultimoMarcador = this.marcadores.pop();
-      if (ultimoMarcador) {
-        ultimoMarcador.remove(); // Eliminar el marcador del mapa
-      }
-
-      // Actualizar la línea temporal
-      if (this.puntos.length > 1) {
-        this.dibujarLineaTemporal([...this.puntos]);
-      } else {
-        this.eliminarLineaTemporal(); // Si no hay puntos, eliminar la línea temporal
-      }
-    }
-  }
-
-  // Método para guardar el polígono en la lista y dibujarlo en el mapa
-  guardarPoligono() {
-    const idPoligono = `polygon-${this.poligonos.length + 1}`; // Crear un ID único
-
-    // Guardar el polígono en la lista
-    this.poligonos.push({ id: idPoligono, coordenadas: [...this.puntos] });
-
-    // Dibujar el polígono en el mapa
-    this.dibujarPoligono(idPoligono, [...this.puntos]);
-
-    // Eliminar el polígono temporal
-    this.eliminarPoligonoTemporal();
-
-    // Limpiar los marcadores
-    this.marcadores.forEach((marcador) => marcador.remove());
-    this.marcadores = [];
-  }
-
-  // Método para dibujar un polígono en el mapa
-  dibujarPoligono(id: string, coordenadas: number[][]) {
-    const color = this.generarColorAleatorio(); // Generar un color aleatorio para el polígono
-
-    // Agregar la fuente del polígono si no existe
-    this.mapa.addSource(id, {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'Polygon',
-          coordinates: [coordenadas], // Se pasan las coordenadas del polígono
-        },
-      },
-    });
-
-    // Agregar la capa del polígono con un color diferente
-    this.mapa.addLayer({
-      id,
-      type: 'fill',
-      source: id,
-      layout: {},
-      paint: {
-        'fill-color': color, // Color aleatorio
-        'fill-opacity': 0.5, // Opacidad del polígono (50%)
-      },
-    });
-  }
-
-  // Método para eliminar el polígono temporal
-  eliminarPoligonoTemporal() {
-    const idPoligonoTemporal = 'polygon-temp';
-
-    // Eliminar el polígono temporal si existe
-    if (this.mapa.getSource(idPoligonoTemporal)) {
-      this.mapa.removeLayer(idPoligonoTemporal);
-      this.mapa.removeSource(idPoligonoTemporal);
-    }
-  }
-
-  // Método para dibujar una línea temporal mientras el usuario selecciona puntos
-  dibujarLineaTemporal(coordenadas: number[][]) {
-    const idLineaTemporal = 'linea-temporal';
-
-    // Eliminar la línea temporal anterior si existe
-    if (this.mapa.getSource(idLineaTemporal)) {
-      this.mapa.removeLayer(idLineaTemporal);
-      this.mapa.removeSource(idLineaTemporal);
-    }
-
-    // Agregar la fuente de la línea temporal
-    this.mapa.addSource(idLineaTemporal, {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'LineString',
-          coordinates: coordenadas,
-        },
-      },
-    });
-
-    // Agregar la capa de la línea temporal
-    this.mapa.addLayer({
-      id: idLineaTemporal,
-      type: 'line',
-      source: idLineaTemporal,
-      layout: {
-        'line-join': 'round',
-        'line-cap': 'round',
-      },
-      paint: {
-        'line-color': '#FF0000', // Color rojo para la línea temporal
-        'line-width': 2,
-      },
-    });
-  }
-
-  // Método para eliminar la línea temporal
-  eliminarLineaTemporal() {
-    const idLineaTemporal = 'linea-temporal';
-
-    // Eliminar la línea temporal si existe
-    if (this.mapa.getSource(idLineaTemporal)) {
-      this.mapa.removeLayer(idLineaTemporal);
-      this.mapa.removeSource(idLineaTemporal);
-    }
-  }
-
-  // Método para generar un color aleatorio en formato hexadecimal
-  generarColorAleatorio(): string {
-    const letras = '0123456789ABCDEF';
-    let color = '#';
-    for (let i = 0; i < 6; i++) {
-      color += letras[Math.floor(Math.random() * 16)];
-    }
-    return color;
-  }
-
-  // Método para mostrar todos los polígonos seleccionados
-  mostrarPoligonosSeleccionados() {
-    console.log('Polígonos seleccionados:', this.poligonos);
-    alert(`Total de polígonos seleccionados: ${this.poligonos.length}`);
+          // Añadir la capa GeoJSON al mapa
+          map.addLayer({
+            id: 'geoserver-geojson-layer',
+            type: 'fill',  // Tipo de capa (puede ser 'fill', 'line', 'circle', etc.)
+            source: 'geoserver-geojson-layer',
+            layout: {},
+            paint: {
+              'fill-color': '#000',
+              'fill-opacity': 0.8
+            }
+          });
+        });
+      })
+      .catch(error => {
+        console.error('Error al obtener el GeoJSON:', error);
+      });
   } */
 
-  /* mapa!: mapboxgl.Map; // Variable para almacenar el mapa
-  puntos: [number, number][] = []; // Almacena temporalmente los puntos del polígono actual
-  poligonos: { id: string; coordenadas: [number, number][] }[] = []; // Almacena todos los polígonos seleccionados
-  marcadores: mapboxgl.Marker[] = []; // Almacena los marcadores de los puntos
-  poligonoEditando: string | null = null; // Almacena el ID del polígono que se está editando
-  radioTolerancia: number = 10; // Radio de tolerancia para cerrar el polígono (en píxeles)
-*/
 
-  mapa!: mapboxgl.Map; // Variable para almacenar el mapa
+  // Método para añadir la capa GeoJSON desde GeoServer con colores basados en "tipo"
+  addGeoJSONLayer(map: mapboxgl.Map) {
+    const geoJSONUrl = `https://geo.gob.bo/geoserver/geonode/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=geonode%3Aamenazas_naturales&maxFeatures=50&outputFormat=application%2Fjson`;
+
+    fetch(geoJSONUrl)
+      .then(response => response.json())
+      .then(data => {
+          map.on('load', () => {
+              // Añadir la fuente GeoJSON al mapa
+              map.addSource('geoserver-geojson-layer', {
+                  type: 'geojson',
+                  data: data
+              });
+
+              // Añadir la capa GeoJSON con colores dinámicos según la propiedad "tipo"
+              map.addLayer({
+                  id: 'geoserver-geojson-layer',
+                  type: 'fill',
+                  source: 'geoserver-geojson-layer',
+                  layout: {},
+                  paint: {
+                      'fill-color': [
+                          'match',
+                          ['get', 'tipo'],  // Propiedad del GeoJSON
+                          'UR', '#FF5733',   // Urbano - Naranja fuerte
+                          'RURAL', '#33FF57', // Rural - Verde
+                          'MIXTO', '#3357FF', // Mixto - Azul
+                          'PROTEGIDO', '#FFFF33', // Protegido - Amarillo
+                          /* Default */ '#888888'
+                      ],
+                      'fill-opacity': 0.8,
+                      'fill-outline-color': '#000000'
+                  }
+              });
+
+              // Añadir bordes para mejorar la visibilidad de las zonas
+              map.addLayer({
+                  id: 'geoserver-geojson-borders',
+                  type: 'line',
+                  source: 'geoserver-geojson-layer',
+                  layout: {},
+                  paint: {
+                      'line-color': '#000000',
+                      'line-width': 1.5
+                  }
+              });
+          });
+      })
+      .catch(error => {
+          console.error('Error al obtener el GeoJSON:', error);
+      });
+
+
+}
+
+
+
+
+
+  /* mapa!: mapboxgl.Map; // Variable para almacenar el mapa
   puntos: [number, number][] = []; // Almacena temporalmente los puntos del polígono actual
   poligonos: { id: string; coordenadas: [number, number][] }[] = []; // Almacena todos los polígonos seleccionados
   marcadores: mapboxgl.Marker[] = []; // Almacena los marcadores de los puntos
@@ -300,8 +190,8 @@ export class MapaComponent implements OnInit {
       // Activar el modo de dibujo
       this.activarModoDibujo();
     });
-  }
-  // Método para activar el modo de dibujo
+  } */
+ /*  // Método para activar el modo de dibujo
   activarModoDibujo() {
     // Evento para capturar clics en el mapa y agregar puntos
     this.mapa.on('click', (e) => {
@@ -632,5 +522,6 @@ export class MapaComponent implements OnInit {
         .addTo(this.mapa);
       this.marcadores.push(marcador); // Guardar el marcador en el array
     });
-  }
+  } */
+
 }
